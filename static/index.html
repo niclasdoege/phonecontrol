@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone Control</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f172a; --surface: #1e293b; --surface2: #334155;
+  --border: #334155; --accent: #38bdf8; --green: #22c55e;
+  --danger: #f87171; --text: #e2e8f0; --muted: #64748b;
+  --radius: 8px;
+}
+body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+
+/* ── header ── */
+header {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 10px 16px; display: flex; align-items: center; gap: 10px;
+  position: sticky; top: 0; z-index: 100;
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); flex-shrink: 0; }
+.dot.on { background: var(--green); }
+header h1 { font-size: 0.95em; font-weight: 600; color: var(--accent); }
+#hdr-device { font-size: 0.75em; color: var(--muted); margin-left: 4px; }
+header .spacer { flex: 1; }
+.icon-btn {
+  background: none; border: 1px solid var(--border); color: var(--muted);
+  border-radius: 6px; padding: 5px 9px; cursor: pointer; font-size: 1em;
+  transition: color .1s, border-color .1s;
+}
+.icon-btn:hover { color: var(--text); border-color: var(--accent); }
+
+/* ── main ── */
+main { max-width: 580px; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 20px; }
+
+.mirror-btn {
+  display: block; width: 100%; padding: 18px;
+  background: linear-gradient(135deg, #1d4ed8, #0369a1);
+  border: none; border-radius: 12px; color: #fff;
+  font-size: 1.15em; font-weight: 700; letter-spacing: 0.5px;
+  cursor: pointer; text-decoration: none; text-align: center;
+  transition: opacity .15s, transform .1s;
+}
+.mirror-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+.mirror-btn:active { transform: translateY(0); }
+
+/* ── cards ── */
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.card h3 { font-size: 0.8em; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 2px; }
+
+.form-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.form-row label { font-size: 0.78em; color: var(--muted); white-space: nowrap; }
+input[type=text], input[type=number] {
+  background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  border-radius: 6px; padding: 6px 10px; font-size: 0.85em; outline: none;
+}
+input[type=text]:focus, input[type=number]:focus { border-color: var(--accent); }
+
+.btn {
+  background: var(--accent); color: #0f172a; border: none;
+  border-radius: 6px; padding: 7px 14px; font-size: 0.85em; font-weight: 600;
+  cursor: pointer; white-space: nowrap; transition: opacity .1s;
+}
+.btn:hover { opacity: 0.85; }
+.btn.sec { background: var(--surface2); color: var(--text); }
+.btn.sec:hover { background: var(--border); }
+.btn.sm { padding: 4px 10px; font-size: 0.8em; }
+.btn.danger { background: #7f1d1d; color: var(--danger); }
+
+.result-box {
+  font-size: 0.78em; padding: 6px 10px; border-radius: 6px;
+  display: none; white-space: pre-wrap; word-break: break-all;
+}
+.result-box.ok  { background: rgba(34,197,94,.1);  color: var(--green); }
+.result-box.err { background: rgba(248,113,113,.1); color: var(--danger); }
+
+.device-row {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg); border-radius: 6px; padding: 6px 10px; font-size: 0.8em;
+}
+.device-row .serial { font-weight: 600; color: var(--accent); flex: 1; }
+
+/* ── drawer ── */
+#drawer-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 200;
+}
+#drawer-overlay.open { display: block; }
+#drawer {
+  position: fixed; top: 0; right: -100%; width: min(520px, 100vw);
+  height: 100%; background: var(--surface); border-left: 1px solid var(--border);
+  z-index: 201; display: flex; flex-direction: column;
+  transition: right .22s cubic-bezier(.4,0,.2,1);
+  overflow: hidden;
+}
+#drawer.open { right: 0; }
+.drawer-header {
+  display: flex; align-items: center; padding: 12px 16px;
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.drawer-header h2 { font-size: 0.9em; color: var(--accent); flex: 1; }
+.drawer-tabs {
+  display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  overflow-x: auto;
+}
+.dtab {
+  padding: 8px 14px; font-size: 0.8em; cursor: pointer; color: var(--muted);
+  border-bottom: 2px solid transparent; white-space: nowrap; flex-shrink: 0;
+  transition: color .1s;
+}
+.dtab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.dtab:hover:not(.active) { color: var(--text); }
+.dpanel { display: none; flex: 1; overflow-y: auto; padding: 16px; flex-direction: column; gap: 12px; }
+.dpanel.active { display: flex; }
+
+/* keyboard */
+.key-grid { display: flex; flex-wrap: wrap; gap: 5px; }
+.key {
+  background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  border-radius: 5px; padding: 5px 10px; font-size: 0.8em; cursor: pointer; min-width: 36px;
+  text-align: center; transition: background .08s;
+}
+.key:hover { background: var(--surface2); }
+.mod-btn {
+  background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+  border-radius: 5px; padding: 5px 12px; font-size: 0.8em; cursor: pointer;
+  transition: background .08s, color .08s;
+}
+.mod-btn.active { background: var(--accent); color: #0f172a; border-color: var(--accent); }
+.section-label { font-size: 0.72em; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+
+/* api console */
+.console-log {
+  background: #000; border-radius: 6px; padding: 10px;
+  font-family: monospace; font-size: 0.78em; height: 200px;
+  overflow-y: auto; display: flex; flex-direction: column; gap: 4px;
+}
+.log-req { color: #94a3b8; }
+.log-res { color: var(--green); }
+.log-err { color: var(--danger); }
+
+/* ui tree */
+.tree-node { font-family: monospace; font-size: 0.75em; cursor: pointer; padding: 2px 4px; border-radius: 4px; }
+.tree-node:hover { background: var(--surface2); }
+.tree-node .tn-class { color: var(--accent); }
+.tree-node .tn-text { color: var(--green); }
+.tree-node .tn-click { color: #f59e0b; }
+
+/* gn tester */
+.gn-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gn-chip {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 3px 8px; font-size: 0.75em;
+  cursor: pointer; color: var(--muted);
+}
+.gn-chip.on { background: rgba(56,189,248,.12); border-color: var(--accent); color: var(--accent); }
+.gn-log { background: #000; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 0.75em; height: 180px; overflow-y: auto; }
+.gn-log .info  { color: #94a3b8; }
+.gn-log .ok    { color: var(--green); }
+.gn-log .error { color: var(--danger); }
+.gn-log .warn  { color: #f59e0b; }
+
+/* toast */
+#toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--surface2); color: var(--text); border-radius: 20px;
+  padding: 8px 18px; font-size: 0.82em; pointer-events: none;
+  opacity: 0; transition: opacity .2s; z-index: 999; white-space: nowrap;
+}
+#toast.show { opacity: 1; }
+#toast.err { background: rgba(239,68,68,.2); color: var(--danger); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="dot" id="hdr-dot"></div>
+  <h1>Phone Control</h1>
+  <span id="hdr-device"></span>
+  <div class="spacer"></div>
+  <button class="icon-btn" onclick="openDrawer()" title="Advanced tools">⚙</button>
+</header>
+
+<main>
+  <!-- Mirror launch -->
+  <a class="mirror-btn" href="/mirror">Open Mirror →</a>
+
+  <!-- Wireless Debugging (Android 11+) -->
+  <div class="card">
+    <h3>Wireless Debugging (Android 11+)</h3>
+    <div style="font-size:0.78em;color:var(--muted);line-height:1.7">
+      Step 1 — Developer Options → Wireless Debugging → "Pair device with pairing code"
+    </div>
+    <div class="form-row">
+      <label>IP</label><input type="text" id="pair-host" placeholder="192.168.0.x" style="flex:1;min-width:110px">
+      <label>Pair port</label><input type="number" id="pair-port" placeholder="e.g. 41823" style="width:90px">
+      <label>Code</label><input type="text" id="pair-code" placeholder="123456" maxlength="6" style="width:68px;letter-spacing:2px">
+      <button class="btn sec" onclick="doPair()">Pair</button>
+    </div>
+    <div id="pair-result" class="result-box"></div>
+    <div style="font-size:0.78em;color:var(--muted);line-height:1.7">
+      Step 2 — Back on the main Wireless Debugging screen, use the <b style="color:var(--text)">connection port</b>:
+    </div>
+    <div class="form-row">
+      <label>IP</label><input type="text" id="wd-host" placeholder="same IP" style="flex:1;min-width:110px">
+      <label>Port</label><input type="number" id="wd-port" placeholder="e.g. 37319" style="width:90px">
+      <button class="btn" onclick="connectWirelessDebug()">Connect</button>
+    </div>
+  </div>
+
+  <!-- USB / TCP -->
+  <div class="card">
+    <h3>USB / TCP (fixed port)</h3>
+    <div style="font-size:0.78em;color:var(--muted);line-height:1.7">
+      Plug phone via USB, click "USB→TCP", then unplug — phone stays on port 5555.
+    </div>
+    <div class="form-row">
+      <button class="btn sec" onclick="connectUsb()">Connect USB</button>
+      <button class="btn sec" onclick="enableTcpip()">USB → TCP 5555</button>
+    </div>
+    <div class="form-row">
+      <label>IP</label><input type="text" id="tcp-host" placeholder="192.168.0.x" style="flex:1;min-width:110px">
+      <label>Port</label><input type="number" id="tcp-port" value="5555" style="width:68px">
+      <button class="btn" onclick="connectTcp()">Connect</button>
+    </div>
+  </div>
+
+  <!-- Detected devices -->
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:8px">
+      <h3 style="flex:1;margin:0">Detected devices</h3>
+      <button class="btn sm sec" onclick="loadDevices()">↻ Scan</button>
+      <button class="btn sm danger" onclick="disconnectDevice()">Disconnect</button>
+    </div>
+    <div id="device-list" style="display:flex;flex-direction:column;gap:6px;font-size:0.8em;color:var(--muted)">
+      Click Scan to list connected devices
+    </div>
+  </div>
+</main>
+
+<!-- ── Advanced drawer ── -->
+<div id="drawer-overlay" onclick="closeDrawer()"></div>
+<div id="drawer">
+  <div class="drawer-header">
+    <h2>Advanced</h2>
+    <button class="icon-btn" onclick="closeDrawer()">✕</button>
+  </div>
+  <div class="drawer-tabs">
+    <div class="dtab active" data-panel="keyboard">Keyboard</div>
+    <div class="dtab" data-panel="uitree">UI Tree</div>
+    <div class="dtab" data-panel="apiconsole">API Console</div>
+    <div class="dtab" data-panel="gntester">GameNative</div>
+  </div>
+
+  <!-- Keyboard -->
+  <div class="dpanel active" id="dpanel-keyboard">
+    <div class="section-label">Modifiers</div>
+    <div class="key-grid" id="modifiers">
+      <button class="mod-btn" data-mod="ctrl">Ctrl</button>
+      <button class="mod-btn" data-mod="shift">Shift</button>
+      <button class="mod-btn" data-mod="alt">Alt</button>
+    </div>
+    <div class="section-label">Navigation</div>
+    <div class="key-grid">
+      <button class="key" data-key="BACK">Back</button>
+      <button class="key" data-key="HOME">Home</button>
+      <button class="key" data-key="APP_SWITCH">Recents</button>
+      <button class="key" data-key="WAKEUP">Wake</button>
+      <button class="key" data-key="POWER">Power</button>
+      <button class="key" data-key="VOLUME_UP">Vol+</button>
+      <button class="key" data-key="VOLUME_DOWN">Vol-</button>
+      <button class="key" data-key="DPAD_UP">▲</button>
+      <button class="key" data-key="DPAD_DOWN">▼</button>
+      <button class="key" data-key="DPAD_LEFT">◀</button>
+      <button class="key" data-key="DPAD_RIGHT">▶</button>
+      <button class="key" data-key="ENTER">Enter</button>
+      <button class="key" data-key="DEL">Del</button>
+      <button class="key" data-key="ESCAPE">Esc</button>
+      <button class="key" data-key="TAB">Tab</button>
+    </div>
+    <div class="section-label">Type text</div>
+    <div class="form-row">
+      <input type="text" id="type-text" placeholder="Text to type…" style="flex:1">
+      <button class="btn" onclick="sendText()">Send</button>
+    </div>
+    <div class="section-label">Custom keyevent</div>
+    <div class="form-row">
+      <input type="text" id="custom-key" placeholder="e.g. KEYCODE_CAMERA" style="flex:1">
+      <button class="btn sec" onclick="sendCustomKey()">Send</button>
+    </div>
+  </div>
+
+  <!-- UI Tree -->
+  <div class="dpanel" id="dpanel-uitree">
+    <div class="form-row">
+      <button class="btn" onclick="refreshTree()">↻ Dump UI tree</button>
+      <input type="text" id="tap-text-inp" placeholder="Tap by text…" style="flex:1">
+      <button class="btn sec" onclick="tapByText()">Tap</button>
+    </div>
+    <div id="ui-tree" style="font-size:0.75em;font-family:monospace;display:flex;flex-direction:column;gap:2px;"></div>
+  </div>
+
+  <!-- API Console -->
+  <div class="dpanel" id="dpanel-apiconsole">
+    <div class="form-row">
+      <select id="api-method" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px">
+        <option>GET</option><option selected>POST</option>
+      </select>
+      <input type="text" id="api-path" placeholder="/api/status" style="flex:1">
+    </div>
+    <textarea id="api-body" placeholder='{"key":"value"}' style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px;font-family:monospace;font-size:0.8em;resize:vertical;min-height:60px;"></textarea>
+    <div class="form-row">
+      <button class="btn" onclick="runApi()">Send</button>
+      <button class="btn sec sm" onclick="setApi('GET','/api/status','')">status</button>
+      <button class="btn sec sm" onclick="setApi('GET','/api/ui','')">ui</button>
+      <button class="btn sec sm" onclick="setApi('POST','/api/tap','{"x":500,"y":1000}')">tap</button>
+      <button class="btn sec sm" onclick="setApi('POST','/api/key','{"key":"BACK"}')">back</button>
+      <button class="btn sec sm" onclick="setApi('POST','/api/force_stop','{}')">kill</button>
+    </div>
+    <div class="console-log" id="api-log"></div>
+  </div>
+
+  <!-- GameNative tester -->
+  <div class="dpanel" id="dpanel-gntester">
+    <div class="section-label">Config matrix (select values to test)</div>
+    <div style="display:flex;flex-direction:column;gap:8px;" id="gn-matrix"></div>
+    <div class="form-row">
+      <button class="btn" onclick="gnStart()">▶ Start</button>
+      <button class="btn sec" onclick="gnStop()">■ Stop</button>
+      <span id="gn-status" style="font-size:0.78em;color:var(--muted)"></span>
+    </div>
+    <div class="gn-log" id="gn-log"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── helpers ───────────────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = { method, headers: {} };
+  if (body !== undefined && body !== '') {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = typeof body === 'string' ? body : JSON.stringify(body);
+  }
+  const r = await fetch(path, opts);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+let _toastTimer;
+function toast(msg, err) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'show' + (err ? ' err' : '');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.className = '', 2500);
+}
+
+// ── status polling ────────────────────────────────────────────────────────────
+async function pollStatus() {
+  try {
+    const s = await api('GET', '/api/status');
+    const dot = document.getElementById('hdr-dot');
+    const dev = document.getElementById('hdr-device');
+    dot.className = 'dot' + (s.connected ? ' on' : '');
+    dev.textContent = s.connected ? s.device : 'disconnected';
+  } catch { }
+}
+pollStatus();
+setInterval(pollStatus, 4000);
+
+// ── drawer ────────────────────────────────────────────────────────────────────
+function openDrawer() {
+  document.getElementById('drawer-overlay').classList.add('open');
+  document.getElementById('drawer').classList.add('open');
+}
+function closeDrawer() {
+  document.getElementById('drawer-overlay').classList.remove('open');
+  document.getElementById('drawer').classList.remove('open');
+}
+document.querySelectorAll('.dtab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.dtab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.dpanel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('dpanel-' + t.dataset.panel).classList.add('active');
+  });
+});
+
+// ── connect ───────────────────────────────────────────────────────────────────
+async function doPair() {
+  const host = document.getElementById('pair-host').value.trim();
+  const port = parseInt(document.getElementById('pair-port').value);
+  const code = document.getElementById('pair-code').value.trim();
+  if (!host || !port || !code) { toast('Fill in all pair fields', true); return; }
+  const box = document.getElementById('pair-result');
+  box.className = 'result-box'; box.style.display = 'block'; box.textContent = 'Pairing…';
+  try {
+    const r = await api('POST', '/api/pair', { host, port, code });
+    box.className = 'result-box ok'; box.textContent = '✓ ' + (r.pair_output || 'Paired');
+    const wh = document.getElementById('wd-host');
+    if (wh && !wh.value) wh.value = host;
+    toast('Paired — now enter connection port and click Connect');
+  } catch(e) {
+    box.className = 'result-box err'; box.textContent = '✗ ' + e.message;
+  }
+}
+
+async function connectWirelessDebug() {
+  const host = document.getElementById('wd-host').value.trim() || document.getElementById('pair-host').value.trim();
+  const port = parseInt(document.getElementById('wd-port').value);
+  if (!host || !port) { toast('Enter IP and connection port', true); return; }
+  try {
+    const r = await api('POST', '/api/wireless_connect', { host, port });
+    toast('Connected: ' + r.device); pollStatus();
+  } catch(e) { toast('Failed: ' + e.message, true); }
+}
+
+async function enableTcpip() {
+  const r = await api('POST', '/api/tcpip');
+  if (r.ok) toast('TCP mode on port 5555 — unplug USB then connect via IP');
+  else toast('Failed: ' + (r.output || 'no USB device?'), true);
+}
+
+async function connectUsb() {
+  try { const r = await api('POST', '/api/connect', {}); toast('Connected: ' + r.device); pollStatus(); }
+  catch(e) { toast('USB connect failed: ' + e.message, true); }
+}
+
+async function connectTcp() {
+  const host = document.getElementById('tcp-host').value.trim();
+  const port = parseInt(document.getElementById('tcp-port').value) || 5555;
+  if (!host) { toast('Enter IP', true); return; }
+  try { const r = await api('POST', '/api/connect', { host, port }); toast('Connected: ' + r.device); pollStatus(); }
+  catch(e) { toast('Failed: ' + e.message, true); }
+}
+
+async function disconnectDevice() {
+  await api('POST', '/api/disconnect'); toast('Disconnected'); pollStatus();
+}
+
+async function loadDevices() {
+  const devs = await api('GET', '/api/devices');
+  const list = document.getElementById('device-list');
+  if (!devs.length) { list.innerHTML = '<span style="color:var(--muted)">No devices</span>'; return; }
+  list.innerHTML = '';
+  devs.forEach(d => {
+    const row = document.createElement('div');
+    row.className = 'device-row';
+    row.innerHTML = `<span class="serial">${d.serial}</span><button class="btn sm" onclick="connectSerial('${d.serial}')">Use</button>`;
+    list.appendChild(row);
+  });
+}
+
+async function connectSerial(serial) {
+  try { const r = await api('POST', '/api/connect', { serial }); toast('Connected: ' + r.device); pollStatus(); }
+  catch(e) { toast('Failed: ' + e.message, true); }
+}
+
+// ── keyboard ──────────────────────────────────────────────────────────────────
+const activeMods = new Set();
+document.querySelectorAll('.mod-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    const m = b.dataset.mod;
+    if (activeMods.has(m)) { activeMods.delete(m); b.classList.remove('active'); }
+    else { activeMods.add(m); b.classList.add('active'); }
+  });
+});
+document.querySelectorAll('.key').forEach(b => {
+  b.addEventListener('click', async () => {
+    const modMap = { ctrl:'KEYCODE_CTRL_LEFT', shift:'KEYCODE_SHIFT_LEFT', alt:'KEYCODE_ALT_LEFT' };
+    for (const m of activeMods) if (modMap[m]) await api('POST', '/api/key', { key: modMap[m] });
+    await api('POST', '/api/key', { key: b.dataset.key });
+    toast(`Key: ${[...activeMods].join('+')}${activeMods.size?'+':''}${b.dataset.key}`);
+    activeMods.clear(); document.querySelectorAll('.mod-btn').forEach(x => x.classList.remove('active'));
+  });
+});
+
+async function sendText() {
+  const t = document.getElementById('type-text'); if (!t.value) return;
+  await api('POST', '/api/type', { text: t.value }); toast('Typed: ' + t.value.slice(0,30)); t.value = '';
+}
+document.getElementById('type-text').addEventListener('keydown', e => { if(e.key==='Enter') sendText(); });
+
+async function sendCustomKey() {
+  const k = document.getElementById('custom-key').value.trim(); if (!k) return;
+  await api('POST', '/api/key', { key: k }); toast('Key: ' + k);
+}
+document.getElementById('custom-key').addEventListener('keydown', e => { if(e.key==='Enter') sendCustomKey(); });
+
+// ── UI tree ───────────────────────────────────────────────────────────────────
+async function refreshTree() {
+  const data = await api('GET', '/api/ui');
+  const container = document.getElementById('ui-tree');
+  container.innerHTML = '';
+  (data.elements || []).forEach(el => {
+    const d = document.createElement('div');
+    d.className = 'tree-node';
+    const label = el.text || el.label || el.content_desc || '';
+    d.innerHTML = `<span class="tn-class">${el.class}</span>${label ? ` <span class="tn-text">"${label}"</span>` : ''}${el.clickable ? ' <span class="tn-click">[tap]</span>' : ''} <span style="color:var(--muted)">${el.bounds.x1},${el.bounds.y1}</span>`;
+    if (el.clickable || label) {
+      d.title = label || el.class;
+      d.addEventListener('click', () => { api('POST', '/api/tap', { x: el.center.x, y: el.center.y }); toast('Tap: ' + (label || el.class)); });
+    }
+    container.appendChild(d);
+  });
+  if (!data.elements?.length) container.textContent = 'No elements';
+}
+
+async function tapByText() {
+  const text = document.getElementById('tap-text-inp').value.trim();
+  if (!text) return;
+  await api('POST', '/api/tap_text', { text }); toast('Tapped: ' + text);
+}
+
+// ── API console ───────────────────────────────────────────────────────────────
+function setApi(method, path, body) {
+  document.getElementById('api-method').value = method;
+  document.getElementById('api-path').value = path;
+  document.getElementById('api-body').value = body;
+}
+
+async function runApi() {
+  const method = document.getElementById('api-method').value;
+  const path   = document.getElementById('api-path').value.trim();
+  const bodyStr = document.getElementById('api-body').value.trim();
+  const log = document.getElementById('api-log');
+  const req = document.createElement('div'); req.className = 'log-req';
+  req.textContent = `→ ${method} ${path}${bodyStr ? ' ' + bodyStr : ''}`;
+  log.appendChild(req);
+  try {
+    const data = await api(method, path, bodyStr || undefined);
+    const res = document.createElement('div'); res.className = 'log-res';
+    res.textContent = '← ' + JSON.stringify(data, null, 2);
+    log.appendChild(res);
+  } catch(e) {
+    const res = document.createElement('div'); res.className = 'log-err';
+    res.textContent = '✗ ' + e.message;
+    log.appendChild(res);
+  }
+  log.scrollTop = log.scrollHeight;
+}
+
+// ── GameNative tester ─────────────────────────────────────────────────────────
+const GN_MATRIX = {
+  dx_wrapper:               ['dxvk', 'wined3d'],
+  dxvk_version:             ['2.3', '2.4'],
+  adrenotools_turnip:       ['on', 'off'],
+  renderer_present_mode:    ['mailbox', 'fifo'],
+};
+let gnSelected = {};
+
+(function buildMatrix() {
+  const container = document.getElementById('gn-matrix');
+  Object.entries(GN_MATRIX).forEach(([key, vals]) => {
+    gnSelected[key] = new Set(vals); // all selected by default
+    const row = document.createElement('div');
+    row.innerHTML = `<div style="font-size:0.75em;color:var(--muted);margin-bottom:4px">${key}</div>`;
+    const chips = document.createElement('div'); chips.style.cssText = 'display:flex;flex-wrap:wrap;gap:5px';
+    vals.forEach(v => {
+      const chip = document.createElement('div');
+      chip.className = 'gn-chip on'; chip.textContent = v;
+      chip.addEventListener('click', () => {
+        if (gnSelected[key].has(v)) { gnSelected[key].delete(v); chip.classList.remove('on'); }
+        else { gnSelected[key].add(v); chip.classList.add('on'); }
+      });
+      chips.appendChild(chip);
+    });
+    row.appendChild(chips);
+    container.appendChild(row);
+  });
+})();
+
+async function gnStart() {
+  const matrix = {};
+  Object.entries(gnSelected).forEach(([k, s]) => { if (s.size) matrix[k] = [...s]; });
+  await api('POST', '/api/tester/start', { matrix });
+  document.getElementById('gn-status').textContent = 'running…';
+  gnPoll();
+}
+async function gnStop() { await api('POST', '/api/tester/stop'); }
+
+let gnEs = null;
+function gnPoll() {
+  if (gnEs) gnEs.close();
+  const log = document.getElementById('gn-log');
+  gnEs = new EventSource('/api/tester/log');
+  gnEs.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.type === 'status') { document.getElementById('gn-status').textContent = d.state || ''; return; }
+    const line = document.createElement('div');
+    line.className = d.level || 'info';
+    line.textContent = `[${d.level||'?'}] ${d.msg}`;
+    log.appendChild(line); log.scrollTop = log.scrollHeight;
+  };
+  gnEs.onerror = () => gnEs.close();
+}
+</script>
+</body>
+</html>

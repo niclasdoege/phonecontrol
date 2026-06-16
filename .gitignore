@@ -1,0 +1,19 @@
+# Python virtual environment (platform-specific — recreate per machine)
+.venv/
+venv/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Logs and runtime artifacts
+*.log
+
+# macOS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# Local env / secrets (never commit API keys)
+.env

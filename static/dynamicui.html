@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone Mirror — Dynamic UI</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #0a0f1a;
+  color: #e2e8f0;
+  font-family: system-ui, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: 16px;
+  gap: 14px;
+}
+
+/* ── Top bar ── */
+#topbar {
+  width: 100%;
+  max-width: 900px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+#topbar h1 { font-size: 1em; color: #38bdf8; font-weight: 700; flex: 1; }
+#status-msg { font-size: 0.75em; color: #64748b; }
+#refresh-indicator {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #22c55e;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+.topbtn {
+  background: #1e293b; border: 1px solid #334155; color: #94a3b8;
+  border-radius: 6px; padding: 5px 12px; font-size: 0.78em; cursor: pointer;
+  transition: background 0.15s;
+}
+.topbtn:hover { background: #334155; color: #e2e8f0; }
+.topbtn.accent { background: #1e3a5f; border-color: #3b82f6; color: #60a5fa; }
+
+/* ── Main layout ── */
+#main {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  width: 100%;
+  max-width: 900px;
+}
+
+/* ── Phone frame ── */
+#phone-frame {
+  flex-shrink: 0;
+  position: relative;
+  border-radius: 24px;
+  border: 2px solid #334155;
+  overflow: hidden;
+  background: #000;
+  box-shadow: 0 0 40px rgba(56,189,248,0.08);
+}
+
+#phone-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* ── UI overlay ── */
+#ui-overlay {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+}
+
+.ui-el {
+  position: absolute;
+  pointer-events: auto;
+  border-radius: 4px;
+  transition: background 0.1s;
+  overflow: hidden;
+}
+
+/* Clickable → button style */
+.ui-el.is-clickable {
+  border: 1px solid rgba(59,130,246,0.35);
+  background: rgba(59,130,246,0.06);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.ui-el.is-clickable:hover {
+  background: rgba(59,130,246,0.22);
+  border-color: rgba(59,130,246,0.7);
+  z-index: 999;
+}
+.ui-el.is-clickable:active { background: rgba(59,130,246,0.4); }
+
+/* Switch toggle style */
+.ui-el.is-switch {
+  border: 1px solid rgba(167,139,250,0.4);
+  background: rgba(167,139,250,0.08);
+  cursor: pointer;
+  border-radius: 20px;
+}
+.ui-el.is-switch:hover { background: rgba(167,139,250,0.22); }
+.ui-el.is-switch.checked { background: rgba(124,58,237,0.3); border-color: rgba(124,58,237,0.7); }
+
+/* Text fields */
+.ui-el.is-edittext {
+  border: 1px solid rgba(251,191,36,0.5);
+  background: rgba(251,191,36,0.05);
+}
+.ui-el.is-edittext input {
+  width: 100%; height: 100%;
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  font-size: inherit;
+  padding: 2px 6px;
+  outline: none;
+  font-family: inherit;
+}
+
+/* Text label */
+.ui-el.is-text {
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  overflow: hidden;
+}
+
+/* Scrollable container */
+.ui-el.is-scrollable {
+  border: 1px solid rgba(52,211,153,0.2);
+}
+
+.el-label {
+  color: #e2e8f0;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+  width: 100%;
+  text-align: center;
+  padding: 0 4px;
+}
+
+/* Flash on tap */
+@keyframes tapflash {
+  0% { background: rgba(59,130,246,0.6); }
+  100% { background: rgba(59,130,246,0.06); }
+}
+.tap-flash { animation: tapflash 0.35s ease-out; }
+
+/* ── Android nav bar ── */
+#nav-bar {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 100%;
+}
+.nav-btn {
+  background: #1e293b; border: 1px solid #334155; color: #94a3b8;
+  border-radius: 8px; padding: 8px 20px; font-size: 0.9em; cursor: pointer;
+  flex: 1; max-width: 100px; text-align: center;
+  transition: background 0.15s;
+}
+.nav-btn:hover { background: #334155; color: #e2e8f0; }
+
+/* ── Right panel ── */
+#right-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.panel-card {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.panel-title {
+  font-size: 0.72em;
+  font-weight: 700;
+  color: #38bdf8;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+/* ── Visible texts chips ── */
+#texts-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.text-chip {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 3px 10px;
+  font-size: 0.75em;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+}
+.text-chip:hover { background: #1e3a5f; border-color: #3b82f6; color: #e2e8f0; }
+.text-chip.clickable-el { border-color: rgba(59,130,246,0.5); color: #93c5fd; }
+.text-chip.clickable-el:hover { background: rgba(59,130,246,0.2); }
+
+/* ── Quick type ── */
+#quick-type-form { display: flex; gap: 6px; }
+#quick-type-input {
+  flex: 1; background: #1e293b; border: 1px solid #334155;
+  border-radius: 6px; color: #e2e8f0; padding: 6px 10px;
+  font-size: 0.85em; outline: none; font-family: inherit;
+}
+#quick-type-input:focus { border-color: #3b82f6; }
+
+/* ── Last action log ── */
+#action-log {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 140px;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 0.75em;
+}
+.log-line { color: #64748b; }
+.log-line.ok  { color: #4ade80; }
+.log-line.err { color: #f87171; }
+
+/* ── GameNative shortcut ── */
+.gn-steps { display: flex; flex-direction: column; gap: 5px; }
+.step-btn {
+  background: #1e293b; border: 1px solid #334155; color: #94a3b8;
+  border-radius: 6px; padding: 6px 10px; font-size: 0.78em;
+  cursor: pointer; text-align: left; transition: all 0.15s;
+}
+.step-btn:hover { background: #1e3a5f; border-color: #7c3aed; color: #c4b5fd; }
+
+/* ── Info footer ── */
+#info-footer {
+  font-size: 0.72em;
+  color: #334155;
+  text-align: center;
+}
+#info-footer a { color: #38bdf8; text-decoration: none; }
+#info-footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div id="topbar">
+  <h1>📱 Phone Mirror</h1>
+  <div id="refresh-indicator" title="Live refresh active"></div>
+  <span id="status-msg">Loading…</span>
+  <button class="topbtn accent" onclick="refreshUI()">↻ Refresh</button>
+  <label style="font-size:0.75em;color:#64748b;display:flex;align-items:center;gap:5px;cursor:pointer">
+    <input type="checkbox" id="auto-toggle" checked> Auto 2s
+  </label>
+  <a href="/" class="topbtn">← Dashboard</a>
+</div>
+
+<!-- Main layout -->
+<div id="main">
+
+  <!-- Phone display -->
+  <div style="display:flex;flex-direction:column;gap:8px;align-items:center">
+    <div id="phone-frame">
+      <img id="phone-video" src="/video" alt="phone screen">
+      <div id="ui-overlay"></div>
+    </div>
+    <!-- Android nav -->
+    <div id="nav-bar">
+      <button class="nav-btn" onclick="doKey('BACK')" title="Back">◀</button>
+      <button class="nav-btn" onclick="doKey('HOME')" title="Home">⬤</button>
+      <button class="nav-btn" onclick="doKey('APP_SWITCH')" title="Recents">▣</button>
+    </div>
+    <div style="display:flex;gap:6px;width:100%;justify-content:center">
+      <button class="topbtn" onclick="doScroll('up')">↑ Scroll</button>
+      <button class="topbtn" onclick="doScroll('down')">↓ Scroll</button>
+      <button class="topbtn" onclick="doKey('WAKEUP')">Wake</button>
+    </div>
+  </div>
+
+  <!-- Right panel -->
+  <div id="right-panel">
+
+    <!-- Visible text elements -->
+    <div class="panel-card">
+      <div class="panel-title">Visible elements — click to tap</div>
+      <div id="texts-list"><span style="color:#334155;font-size:0.8em">Loading…</span></div>
+    </div>
+
+    <!-- Type text -->
+    <div class="panel-card">
+      <div class="panel-title">Type text</div>
+      <div id="quick-type-form">
+        <input id="quick-type-input" type="text" placeholder="Type something and press Enter…">
+        <button class="topbtn" onclick="doType()">Send</button>
+      </div>
+    </div>
+
+    <!-- GameNative shortcuts -->
+    <div class="panel-card">
+      <div class="panel-title">GameNative shortcuts</div>
+      <div class="gn-steps">
+        <button class="step-btn" onclick="doTapText('Options')">① Tap "Options"</button>
+        <button class="step-btn" onclick="doTapText('Edit container')">② Tap "Edit container"</button>
+        <button class="step-btn" onclick="doTapText('Graphics')">③ Tap "Graphics" tab</button>
+        <button class="step-btn" onclick="doTapText('Play')">▶ Tap "Play" (launch game)</button>
+        <button class="step-btn" onclick="doKey('BACK')">← Back</button>
+        <a href="/#gntester" class="step-btn" style="display:block;text-decoration:none;color:inherit">
+          🧪 Open full AutoTester →
+        </a>
+      </div>
+    </div>
+
+    <!-- Action log -->
+    <div class="panel-card">
+      <div class="panel-title">Action log</div>
+      <div id="action-log"><div class="log-line">Ready.</div></div>
+    </div>
+
+  </div><!-- /right-panel -->
+</div><!-- /main -->
+
+<div id="info-footer">
+  Auto-refreshing UI tree every 2s &nbsp;·&nbsp;
+  <a href="/dynamicuipage">/dynamicuipage</a> &nbsp;·&nbsp;
+  API: <code>GET /api/ui_texts</code> &nbsp;
+  <code>POST /api/tap_text</code>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+let PHONE_W = 1116, PHONE_H = 2480;
+const TARGET_W = 340; // display width in px
+
+let _autoTimer = null;
+let _refreshing = false;
+
+// ── Phone frame sizing ────────────────────────────────────────────────────────
+function sizeFrame() {
+  const scale = TARGET_W / PHONE_W;
+  const frame = document.getElementById('phone-frame');
+  frame.style.width  = TARGET_W + 'px';
+  frame.style.height = Math.round(PHONE_H * scale) + 'px';
+  const img = document.getElementById('phone-video');
+  img.style.width  = TARGET_W + 'px';
+  img.style.height = Math.round(PHONE_H * scale) + 'px';
+}
+
+// ── Logging ───────────────────────────────────────────────────────────────────
+function log(msg, cls = '') {
+  const log = document.getElementById('action-log');
+  const line = document.createElement('div');
+  line.className = 'log-line ' + cls;
+  const ts = new Date().toLocaleTimeString();
+  line.textContent = `[${ts}] ${msg}`;
+  log.appendChild(line);
+  // Keep last 30 lines
+  while (log.children.length > 30) log.removeChild(log.firstChild);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ── API helpers ───────────────────────────────────────────────────────────────
+async function apiPost(path, body) {
+  const r = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function doTap(x, y, label) {
+  try {
+    await apiPost('/api/tap', { x, y });
+    log(`✓ tapped ${label || `(${x},${y})`}`, 'ok');
+    setTimeout(refreshUI, 700);
+  } catch(e) { log(`✗ ${e.message}`, 'err'); }
+}
+
+async function doTapText(text) {
+  try {
+    log(`→ tap "${text}"…`);
+    const r = await apiPost('/api/tap_text', { text, timeout: 5 });
+    log(`✓ tapped "${text}" at ${r.at.x},${r.at.y}`, 'ok');
+    setTimeout(refreshUI, 700);
+  } catch(e) { log(`✗ "${text}" not found`, 'err'); }
+}
+
+async function doKey(key) {
+  try {
+    await apiPost('/api/key', { key });
+    log(`✓ key ${key}`, 'ok');
+    setTimeout(refreshUI, 700);
+  } catch(e) { log(`✗ key ${key}: ${e.message}`, 'err'); }
+}
+
+async function doType() {
+  const inp = document.getElementById('quick-type-input');
+  const text = inp.value.trim();
+  if (!text) return;
+  try {
+    await apiPost('/api/type', { text });
+    log(`✓ typed "${text}"`, 'ok');
+    inp.value = '';
+    setTimeout(refreshUI, 400);
+  } catch(e) { log(`✗ type: ${e.message}`, 'err'); }
+}
+
+async function doScroll(dir) {
+  try {
+    await apiPost('/api/scroll', { direction: dir, amount: 2 });
+    log(`✓ scroll ${dir}`, 'ok');
+    setTimeout(refreshUI, 600);
+  } catch(e) { log(`✗ scroll: ${e.message}`, 'err'); }
+}
+
+// ── UI tree rendering ─────────────────────────────────────────────────────────
+async function refreshUI() {
+  if (_refreshing) return;
+  _refreshing = true;
+  document.getElementById('refresh-indicator').style.background = '#fbbf24';
+  try {
+    const data = await fetch('/api/ui').then(r => r.json());
+
+    // Update screen size if returned
+    if (data.screen_width)  PHONE_W = data.screen_width;
+    if (data.screen_height) PHONE_H = data.screen_height;
+    sizeFrame();
+
+    const scale = TARGET_W / PHONE_W;
+    const els   = data.elements || [];
+
+    // ── Render overlay elements ──
+    const overlay = document.getElementById('ui-overlay');
+    overlay.innerHTML = '';
+
+    // Sort: largest area first → smaller elements appear on top (higher z-index)
+    const sorted = [...els].sort((a, b) => {
+      const areaA = (a.bounds.x2 - a.bounds.x1) * (a.bounds.y2 - a.bounds.y1);
+      const areaB = (b.bounds.x2 - b.bounds.x1) * (b.bounds.y2 - b.bounds.y1);
+      return areaB - areaA;
+    });
+
+    sorted.forEach((el, i) => {
+      const b   = el.bounds;
+      const w   = (b.x2 - b.x1) * scale;
+      const h   = (b.y2 - b.y1) * scale;
+      const cls = el.class || '';
+
+      // Decide what to render
+      const isEditText = cls.includes('EditText');
+      const isSwitch   = cls.includes('Switch') || cls.includes('ToggleButton') || cls.includes('CompoundButton');
+      const hasText    = !!(el.text || el.label || el.content_desc);
+      const isClick    = el.clickable;
+      const isScroll   = el.scrollable;
+
+      // Skip pure container elements with nothing interesting
+      if (!isEditText && !isSwitch && !hasText && !isClick && !isScroll) return;
+      // Skip tiny elements
+      if (w < 8 || h < 8) return;
+
+      const div = document.createElement('div');
+      div.className = 'ui-el';
+      div.style.left   = (b.x1 * scale) + 'px';
+      div.style.top    = (b.y1 * scale) + 'px';
+      div.style.width  = w + 'px';
+      div.style.height = h + 'px';
+      div.style.zIndex = i; // larger index = higher z-index (smaller elements)
+      div.title = [el.text, el.content_desc, el.class].filter(Boolean).join(' | ');
+
+      const label = el.text || el.label || el.content_desc || '';
+      const fontSize = Math.max(9, Math.min(14, h * 0.35)) + 'px';
+
+      if (isEditText) {
+        div.classList.add('is-edittext');
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.placeholder = label || 'type here…';
+        inp.style.fontSize = fontSize;
+        inp.addEventListener('keydown', async e => {
+          if (e.key === 'Enter') {
+            const val = inp.value.trim();
+            if (!val) return;
+            await doTap(el.center.x, el.center.y, 'text field');
+            await new Promise(r => setTimeout(r, 400));
+            await apiPost('/api/type', { text: val }).catch(() => {});
+            log(`✓ typed "${val}" into ${label || 'field'}`, 'ok');
+            inp.value = '';
+            setTimeout(refreshUI, 600);
+          }
+        });
+        div.appendChild(inp);
+
+      } else if (isSwitch) {
+        div.classList.add('is-switch');
+        if (el.checked) div.classList.add('checked');
+        const lbl = document.createElement('span');
+        lbl.className = 'el-label';
+        lbl.style.fontSize = fontSize;
+        lbl.textContent = el.checked ? '● ON' : '○ OFF';
+        div.appendChild(lbl);
+        div.addEventListener('click', () => {
+          div.classList.add('tap-flash');
+          setTimeout(() => div.classList.remove('tap-flash'), 400);
+          doTap(el.center.x, el.center.y, label || 'switch');
+        });
+
+      } else if (isClick) {
+        div.classList.add('is-clickable');
+        if (label) {
+          const lbl = document.createElement('span');
+          lbl.className = 'el-label';
+          lbl.style.fontSize = fontSize;
+          lbl.textContent = label;
+          div.appendChild(lbl);
+        }
+        div.addEventListener('click', () => {
+          div.classList.add('tap-flash');
+          setTimeout(() => div.classList.remove('tap-flash'), 400);
+          doTap(el.center.x, el.center.y, label);
+        });
+
+      } else if (isScroll) {
+        div.classList.add('is-scrollable');
+        // no label — just show scroll indicator border
+
+      } else if (hasText) {
+        div.classList.add('is-text');
+        div.style.pointerEvents = 'none';
+        const lbl = document.createElement('span');
+        lbl.className = 'el-label';
+        lbl.style.fontSize = fontSize;
+        lbl.style.color = 'rgba(226,232,240,0.55)';
+        lbl.style.fontWeight = '400';
+        lbl.textContent = label;
+        div.appendChild(lbl);
+      }
+
+      overlay.appendChild(div);
+    });
+
+    // ── Render right-panel chips ──
+    const chipList = document.getElementById('texts-list');
+    chipList.innerHTML = '';
+    const seen = new Set();
+    els.forEach(el => {
+      const label = el.text || el.label || el.content_desc || '';
+      if (!label || seen.has(label)) return;
+      seen.add(label);
+      const chip = document.createElement('span');
+      chip.className = 'text-chip' + (el.clickable ? ' clickable-el' : '');
+      chip.textContent = label;
+      chip.title = el.clickable ? `Tap "${label}"` : label;
+      if (el.clickable) {
+        chip.onclick = () => doTap(el.center.x, el.center.y, label);
+      }
+      chipList.appendChild(chip);
+    });
+    if (!seen.size) chipList.innerHTML = '<span style="color:#334155;font-size:0.8em">No text elements visible</span>';
+
+    document.getElementById('status-msg').textContent = `${els.length} elements`;
+  } catch(e) {
+    log(`UI refresh error: ${e.message}`, 'err');
+    document.getElementById('status-msg').textContent = 'refresh error';
+  } finally {
+    _refreshing = false;
+    document.getElementById('refresh-indicator').style.background = '#22c55e';
+  }
+}
+
+// ── Auto-refresh toggle ────────────────────────────────────────────────────────
+function startAuto() {
+  if (_autoTimer) return;
+  _autoTimer = setInterval(refreshUI, 2000);
+}
+function stopAuto() {
+  clearInterval(_autoTimer);
+  _autoTimer = null;
+}
+document.getElementById('auto-toggle').addEventListener('change', e => {
+  e.target.checked ? startAuto() : stopAuto();
+});
+
+// ── Quick type Enter ──────────────────────────────────────────────────────────
+document.getElementById('quick-type-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doType();
+});
+
+// ── Video stream error recovery ───────────────────────────────────────────────
+const vid = document.getElementById('phone-video');
+vid.onerror = () => {
+  setTimeout(() => { vid.src = '/video?t=' + Date.now(); }, 3000);
+};
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+sizeFrame();
+refreshUI();
+startAuto();
+</script>
+</body>
+</html>

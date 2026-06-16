@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone Mirror</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%; background: #000;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  overflow: hidden; font-family: system-ui, sans-serif;
+}
+
+#wrap {
+  position: relative; flex-shrink: 0;
+  background: #0f172a;
+}
+#video { display: block; width: 100%; height: 100%; object-fit: contain; }
+#overlay { position: absolute; inset: 0; pointer-events: none; }
+#overlay.dim { opacity: 0.15; }
+
+/* ── element types ── */
+.el { position: absolute; border-radius: 4px; overflow: hidden; pointer-events: auto; }
+
+.el.tap {
+  border: 1px solid rgba(56,189,248,0.45);
+  background: rgba(56,189,248,0.08);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.el.tap:hover  { background: rgba(56,189,248,0.25); border-color: rgba(56,189,248,0.9); z-index: 9999; }
+.el.tap:active { background: rgba(56,189,248,0.50); }
+
+.el.sw {
+  border: 1px solid rgba(167,139,250,0.5);
+  background: rgba(167,139,250,0.10);
+  cursor: pointer; border-radius: 20px;
+  display: flex; align-items: center; justify-content: center;
+}
+.el.sw:hover { background: rgba(167,139,250,0.28); }
+.el.sw.on { background: rgba(124,58,237,0.35); border-color: rgba(124,58,237,0.9); }
+
+.el.edit {
+  border: 2px solid rgba(251,191,36,0.8);
+  background: rgba(0,0,0,0.55); cursor: text;
+  display: flex; align-items: center;
+}
+.el.edit input {
+  width: 100%; height: 100%; background: transparent; border: none;
+  color: #fef9c3; padding: 2px 6px; font-size: inherit; font-family: inherit; outline: none;
+}
+.el.edit.focused { border-color: #fbbf24; background: rgba(0,0,0,0.75); }
+
+.el.lbl { pointer-events: none; display: flex; align-items: center; padding: 0 3px; }
+
+.el-text {
+  color: #e2e8f0; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  width: 100%; text-align: center;
+  text-shadow: 0 1px 5px #000, 0 0 10px #000;
+}
+
+/* video-off mode: stronger element styles (no video backdrop) */
+body.novid .el.tap  { background: rgba(56,189,248,0.18); border-color: rgba(56,189,248,0.7); }
+body.novid .el.sw   { background: rgba(167,139,250,0.18); border-color: rgba(167,139,250,0.7); }
+body.novid .el.lbl  { background: rgba(15,23,42,0.7); border-radius: 3px; }
+body.novid .el-text { text-shadow: none; }
+
+@keyframes flash { 0%{opacity:0.8} 100%{opacity:1} }
+.flashing { animation: flash .25s ease-out; }
+
+/* ── nav bar ── */
+#nav {
+  display: flex; gap: 6px;
+  padding: 6px 0 4px; width: 100%; justify-content: center;
+}
+.nb {
+  background: #111; border: 1px solid #222; color: #888;
+  border-radius: 7px; padding: 6px 10px; font-size: 0.85em;
+  cursor: pointer; flex: 1; max-width: 72px;
+  text-align: center; transition: background .1s, color .1s; white-space: nowrap;
+}
+.nb:hover { background: #1e293b; color: #e2e8f0; }
+.nb.active { background: #1e3a5f; color: #38bdf8; border-color: #1d4ed8; }
+.nb.danger { border-color: #7f1d1d; color: #f87171; }
+.nb.danger:hover { background: #450a0a; color: #fca5a5; }
+.nb.warn { border-color: #78350f; color: #fbbf24; }
+.nb.warn:hover { background: #451a03; color: #fde68a; }
+
+/* ── stale banner ── */
+#stale-banner {
+  position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+  background: rgba(120,35,15,0.92); color: #fde68a;
+  font-size: 0.7em; padding: 3px 12px; border-radius: 20px;
+  pointer-events: none; display: none; white-space: nowrap; z-index: 99998;
+}
+#stale-banner.show { display: block; }
+
+/* ── floating tooltip ── */
+#tip {
+  position: fixed; pointer-events: none;
+  background: rgba(15,23,42,0.96); color: #e2e8f0;
+  border: 1px solid rgba(56,189,248,0.5); border-radius: 6px;
+  padding: 4px 10px; font-size: 0.78em; font-weight: 700;
+  white-space: pre-wrap; max-width: 240px; word-break: break-word;
+  z-index: 99999; opacity: 0; transition: opacity 0.08s;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.7);
+}
+
+/* ── status / links ── */
+#status {
+  position: fixed; top: 8px; right: 10px;
+  font-size: 0.63em; color: #334155;
+  display: flex; align-items: center; gap: 5px;
+  pointer-events: none; user-select: none;
+}
+#dot { width: 6px; height: 6px; border-radius: 50%; background: #334155; }
+#dot.live { background: #22c55e; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+#back-link { position: fixed; top: 8px; left: 10px; font-size: 0.63em; color: #334155; text-decoration: none; }
+#back-link:hover { color: #38bdf8; }
+
+/* ── type hint ── */
+#type-hint {
+  position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+  background: rgba(251,191,36,0.9); color: #000;
+  font-size: 0.75em; padding: 4px 12px; border-radius: 20px;
+  pointer-events: none; opacity: 0; transition: opacity 0.2s; white-space: nowrap;
+}
+#type-hint.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div id="tip"></div>
+<div id="wrap">
+  <img id="video" src="/video" alt="">
+  <div id="overlay"></div>
+  <div id="stale-banner">⚠ stale UI — switching app?</div>
+</div>
+
+<div id="nav">
+  <button class="nb" onclick="navKey('BACK')"       title="Back">◀</button>
+  <button class="nb" onclick="navKey('HOME')"       title="Home">⬤</button>
+  <button class="nb" onclick="navKey('APP_SWITCH')" title="Recents">▣</button>
+  <button class="nb" id="vid-btn" onclick="toggleVideo()" title="Toggle video stream">📷</button>
+  <button class="nb warn" onclick="clearOverlay()"  title="Clear overlay">✕UI</button>
+  <button class="nb danger" onclick="killApp()"     title="Force-stop foreground app">Kill</button>
+  <button class="nb" onclick="navKey('POWER')" title="Sleep / Wake screen">⏻</button>
+  <button class="nb" onclick="rotateScreen()" title="Rotate screen">⟳</button>
+</div>
+
+<div id="status"><div id="dot"></div><span id="st">connecting…</span></div>
+<a id="back-link" href="/">← dashboard</a>
+<div id="type-hint">Type then press Enter ↵</div>
+
+<script>
+// ── video toggle ──────────────────────────────────────────────────────────────
+let _videoOn = true;
+const vidEl  = document.getElementById('video');
+
+function toggleVideo() {
+  _videoOn = !_videoOn;
+  const btn = document.getElementById('vid-btn');
+  if (_videoOn) {
+    vidEl.src = '/video?t=' + Date.now();
+    vidEl.style.display = '';
+    btn.classList.remove('active');
+    btn.title = 'Disable video (overlay only)';
+  } else {
+    vidEl.src = '';
+    vidEl.style.display = 'none';
+    btn.classList.add('active');
+    btn.title = 'Enable video';
+    document.body.classList.add('novid');
+  }
+  if (!_videoOn) document.body.classList.add('novid');
+  else           document.body.classList.remove('novid');
+}
+
+// Reconnect on error
+vidEl.onerror = () => {
+  if (_videoOn) setTimeout(() => { vidEl.src = '/video?t=' + Date.now(); }, 2000);
+};
+
+// Stall watchdog — MJPEG img doesn't fire onerror when frames stop arriving.
+// Sample a pixel every 5s; if unchanged for 15s, reload the stream.
+const _wdCanvas = document.createElement('canvas');
+_wdCanvas.width = _wdCanvas.height = 4;
+const _wdCtx = _wdCanvas.getContext('2d');
+let _lastPixel = '', _lastChange = Date.now();
+
+setInterval(() => {
+  if (!_videoOn) return;
+  try {
+    _wdCtx.drawImage(vidEl, 0, 0, 4, 4);
+    const px = _wdCtx.getImageData(0, 0, 4, 4).data.slice(0, 8).join(',');
+    if (px !== _lastPixel) { _lastPixel = px; _lastChange = Date.now(); }
+    else if (Date.now() - _lastChange > 15000) {
+      _lastChange = Date.now(); // reset so we don't spam
+      vidEl.src = '/video?t=' + Date.now();
+    }
+  } catch { /* cross-origin draw blocked — ignore */ }
+}, 5000);
+
+// ── dimensions ────────────────────────────────────────────────────────────────
+let PW = 1116, PH = 2480;
+
+function applyDims(w, h) {
+  if (!w || !h) return;
+  const changed = (w !== PW || h !== PH);
+  PW = w; PH = h;
+  _scale = doResize();
+  if (changed) renderElements(_lastEls);
+}
+
+function doResize() {
+  const availH = window.innerHeight - 52;
+  const availW = window.innerWidth;
+  const scale  = Math.min(availW / PW, availH / PH);
+  const wrap   = document.getElementById('wrap');
+  wrap.style.width  = Math.round(PW * scale) + 'px';
+  wrap.style.height = Math.round(PH * scale) + 'px';
+  return scale;
+}
+
+let _scale = doResize();
+window.addEventListener('resize', () => { _scale = doResize(); renderElements(_lastEls); });
+
+// ── tooltip ───────────────────────────────────────────────────────────────────
+const tip = document.getElementById('tip');
+
+function tipShow(text, rect) {
+  if (!text) return;
+  tip.textContent = text;
+  tip.style.opacity = '1';
+  const tw = Math.min(240, text.length * 8 + 24);
+  let tx = rect.left + rect.width / 2 - tw / 2;
+  let ty = rect.top - 40;
+  if (ty < 8) ty = rect.bottom + 6;
+  tx = Math.max(8, Math.min(tx, window.innerWidth - tw - 8));
+  tip.style.left = tx + 'px';
+  tip.style.top  = ty + 'px';
+}
+function tipHide() { tip.style.opacity = '0'; }
+
+// ── package tracking ──────────────────────────────────────────────────────────
+let _lastPkg = '';
+function checkPackageChange(pkg) {
+  if (!pkg || pkg === _lastPkg) return;
+  if (_lastPkg) clearOverlay();
+  _lastPkg = pkg;
+}
+
+// ── overlay helpers ───────────────────────────────────────────────────────────
+function clearOverlay() {
+  const ov = document.getElementById('overlay');
+  ov.innerHTML = '';
+  ov.style.opacity = '1';
+  ov.classList.remove('dim');
+  document.getElementById('stale-banner').classList.remove('show');
+}
+
+let _suppressUntil = 0;
+let _suppressTimer = null;
+
+function suppressOverlay() {
+  // Don't keep extending if already suppressing — cap at 600ms from first tap
+  if (_suppressUntil > Date.now()) return;
+  _suppressUntil = Date.now() + 600;
+  const ov = document.getElementById('overlay');
+  ov.classList.add('dim');
+  ov.innerHTML = '';
+  // Self-clearing timer — overlay always comes back even if WS stalls
+  clearTimeout(_suppressTimer);
+  _suppressTimer = setTimeout(() => {
+    clearSuppression();
+    renderElements(_lastEls);
+  }, 650);
+}
+function clearSuppression() {
+  clearTimeout(_suppressTimer);
+  _suppressUntil = 0;
+  document.getElementById('overlay').classList.remove('dim');
+}
+
+// ── API ───────────────────────────────────────────────────────────────────────
+function post(path, body) {
+  return fetch(path, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+}
+
+async function doTap(x, y) { suppressOverlay(); await post('/api/tap', { x, y }); }
+async function navKey(key)  { suppressOverlay(); await post('/api/key', { key }); }
+async function rotateScreen() { await post('/api/rotate', {}); }
+
+async function killApp() {
+  const btn = document.querySelector('.nb.danger');
+  const orig = btn.textContent;
+  btn.textContent = '…';
+  try {
+    await fetch('/api/force_stop', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
+    btn.textContent = '✓'; clearOverlay(); suppressOverlay();
+  } catch { btn.textContent = '!'; }
+  setTimeout(() => { btn.textContent = orig; }, 1500);
+}
+
+// ── type hint ─────────────────────────────────────────────────────────────────
+const hint = document.getElementById('type-hint');
+let _hintTimer = null;
+function showHint() {
+  hint.classList.add('show');
+  clearTimeout(_hintTimer);
+  _hintTimer = setTimeout(() => hint.classList.remove('show'), 3500);
+}
+
+// ── overlay rendering ─────────────────────────────────────────────────────────
+let _lastEls = [];
+
+function renderElements(els) {
+  _lastEls = els || [];
+  if (Date.now() < _suppressUntil) return;
+
+  const overlay = document.getElementById('overlay');
+  overlay.innerHTML = '';
+
+  // Sort largest-first so small interactive elements sit on top
+  const sorted = [..._lastEls].sort((a, b) => {
+    const aA = (a.bounds.x2-a.bounds.x1) * (a.bounds.y2-a.bounds.y1);
+    const bA = (b.bounds.x2-b.bounds.x1) * (b.bounds.y2-b.bounds.y1);
+    return bA - aA;
+  });
+
+  // Build a lookup of text labels by center position for unlabeled clickables
+  const textByCenter = {};
+  _lastEls.forEach(e => {
+    if ((e.text || e.label) && !e.clickable) {
+      const key = `${e.center.x},${e.center.y}`;
+      textByCenter[key] = e.text || e.label;
+    }
+  });
+
+  sorted.forEach((el, zi) => {
+    const b      = el.bounds;
+    const dW     = b.x2 - b.x1;
+    const dH     = b.y2 - b.y1;
+    const pxW    = dW * _scale;
+    const pxH    = dH * _scale;
+    const cls    = el.class || '';
+    // For unlabeled clickables, look for a text sibling whose center is inside this element
+    let label = el.text || el.label || el.content_desc || '';
+    if (!label && el.clickable) {
+      for (const [key, txt] of Object.entries(textByCenter)) {
+        const [cx, cy] = key.split(',').map(Number);
+        if (cx >= b.x1 && cx <= b.x2 && cy >= b.y1 && cy <= b.y2) {
+          label = txt; break;
+        }
+      }
+    }
+
+    const isEdit   = cls.includes('EditText');
+    const isSwitch = cls.includes('Switch') || cls.includes('ToggleButton') || cls.includes('CompoundButton');
+    const isClick  = el.clickable;
+    const hasText  = !!label;
+
+    // Basic visibility filter
+    if (!isEdit && !isSwitch && !hasText && !isClick) return;
+    if (pxW < 8 || pxH < 8) return;
+
+    // Drop full-screen unlabeled containers (dialog scrims, touch-to-dismiss overlays).
+    // Use area threshold — real buttons are small, scrims cover >30% of screen.
+    if (!label && !isEdit && (dW * dH) > (PW * PH * 0.30)) return;
+
+    const div = document.createElement('div');
+    div.className = 'el';
+    div.style.cssText = [
+      `left:${(b.x1 * _scale).toFixed(1)}px`,
+      `top:${(b.y1 * _scale).toFixed(1)}px`,
+      `width:${pxW.toFixed(1)}px`,
+      `height:${pxH.toFixed(1)}px`,
+      `z-index:${zi}`,
+      `font-size:${Math.max(9, Math.min(13, pxH * 0.35)).toFixed(1)}px`,
+    ].join(';');
+
+    if (label) {
+      div.title = label;
+      div.setAttribute('aria-label', label);
+      div.dataset.label = label;
+    }
+    div.addEventListener('mouseenter', () => tipShow(label, div.getBoundingClientRect()));
+    div.addEventListener('mouseleave', tipHide);
+
+    if (isEdit) {
+      div.classList.add('edit');
+      const inp = document.createElement('input');
+      inp.type = 'text'; inp.placeholder = label || '…'; inp.autocomplete = 'off';
+      div.addEventListener('mousedown', e => {
+        e.stopPropagation();
+        post('/api/tap', { x: el.center.x, y: el.center.y });
+        div.classList.add('focused');
+        setTimeout(() => inp.focus(), 0);
+        showHint();
+      });
+      inp.addEventListener('focus',  () => div.classList.add('focused'));
+      inp.addEventListener('blur',   () => div.classList.remove('focused'));
+      inp.addEventListener('keydown', async e => {
+        if (e.key === 'Escape') { inp.blur(); return; }
+        if (e.key !== 'Enter' || !inp.value) return;
+        e.preventDefault();
+        const text = inp.value; inp.value = ''; inp.blur();
+        hint.classList.remove('show');
+        await post('/api/type', { text });
+      });
+      div.appendChild(inp);
+
+    } else if (isSwitch) {
+      div.classList.add('sw');
+      if (el.checked) div.classList.add('on');
+      const t = document.createElement('span');
+      t.className = 'el-text';
+      t.textContent = el.checked ? '● ON' : '○ OFF';
+      div.appendChild(t);
+      div.addEventListener('click', () => { div.classList.add('flashing'); setTimeout(()=>div.classList.remove('flashing'),250); doTap(el.center.x, el.center.y); });
+
+    } else if (isClick) {
+      div.classList.add('tap');
+      if (label) {
+        const t = document.createElement('span'); t.className = 'el-text'; t.textContent = label; div.appendChild(t);
+      }
+      div.addEventListener('click', () => { div.classList.add('flashing'); setTimeout(()=>div.classList.remove('flashing'),250); doTap(el.center.x, el.center.y); });
+
+    } else {
+      // non-clickable text label
+      div.classList.add('lbl');
+      const t = document.createElement('span');
+      t.className = 'el-text';
+      t.style.cssText = 'color:rgba(226,232,240,0.5);font-weight:400';
+      t.textContent = label;
+      div.appendChild(t);
+    }
+
+    overlay.appendChild(div);
+  });
+}
+
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+let _ws = null, _reconnectTimer = null;
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws/ui`);
+  _ws = ws;
+
+  ws.onopen = () => {
+    document.getElementById('dot').className = 'live';
+    document.getElementById('st').textContent = 'live';
+    clearTimeout(_reconnectTimer);
+  };
+
+  ws.onmessage = e => {
+    let data; try { data = JSON.parse(e.data); } catch { return; }
+
+    applyDims(data.screen_width, data.screen_height);
+    checkPackageChange(data.foreground_package || '');
+
+    if (data.stale_ui) {
+      clearOverlay();
+      document.getElementById('stale-banner').classList.add('show');
+    } else {
+      document.getElementById('stale-banner').classList.remove('show');
+    }
+
+    const els = data.elements || [];
+    if (Date.now() >= _suppressUntil) {
+      clearSuppression();
+      if (!data.stale_ui) renderElements(els);
+    } else {
+      _lastEls = els;
+    }
+
+    const pkg = (data.foreground_package || '').split('.').pop();
+    const n   = els.length;
+    document.getElementById('st').textContent =
+      `${pkg} · ${n} els · ${data.age_ms ?? '?'}ms` + (data.stale_ui ? ' · STALE' : '') + (data.rotation ? ` · r${data.rotation}` : '');
+  };
+
+  ws.onclose = () => {
+    document.getElementById('dot').className = '';
+    document.getElementById('st').textContent = 'reconnecting…';
+    _reconnectTimer = setTimeout(connect, 2000);
+  };
+  ws.onerror = () => ws.close();
+
+  const ping = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.send('ping'); else clearInterval(ping); }, 20000);
+}
+
+connect();
+</script>
+</body>
+</html>

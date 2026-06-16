@@ -1,0 +1,23 @@
+{
+  "unlock_phone": {
+    "steps": [
+      {
+        "action": "key",
+        "key": "KEYCODE_WAKEUP"
+      },
+      {
+        "action": "sleep",
+        "duration": 1.5
+      },
+      {
+        "action": "swipe",
+        "x1": 558,
+        "y1": 1900,
+        "x2": 558,
+        "y2": 600,
+        "duration_ms": 800
+      }
+    ],
+    "created": 1781547971.3437178
+  }
+}
