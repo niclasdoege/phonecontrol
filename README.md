@@ -145,17 +145,16 @@ Generated test output such as `results.json`, tester logs, and `browser_data/` i
 
 ## Systemd Service
 
-`phonecontrol.service` is included as a starting point. Before installing it, edit:
-
-- `User=`
-- `WorkingDirectory=`
-- `ExecStart=`
-- `ADB_VENDOR_KEYS=`
-
-Then install:
+`phonecontrol.service.template` is included as a reusable systemd template. Install it by replacing the placeholders with your local user, clone path, and ADB key directory:
 
 ```bash
-sudo cp phonecontrol.service /etc/systemd/system/
+sed "s|{{PHONECONTROL_USER}}|$USER|g; s|{{PHONECONTROL_DIR}}|$(pwd)|g; s|{{ADB_VENDOR_KEYS}}|$HOME/.android|g" \
+  phonecontrol.service.template | sudo tee /etc/systemd/system/phonecontrol.service >/dev/null
+```
+
+Then enable it:
+
+```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now phonecontrol
 ```
@@ -170,3 +169,7 @@ Do not commit:
 - Browser session data.
 - Runtime logs.
 - Personal test results.
+
+## License
+
+MIT
