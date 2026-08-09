@@ -170,7 +170,3 @@ Do not commit:
 - Browser session data.
 - Runtime logs.
 - Personal test results.
-
-## GitHub Readiness
-
-The repo is suitable for GitHub as a personal/dev-tool project. Before publishing, consider adding a license and replacing the hard-coded service file paths with your own target install path or a template.
